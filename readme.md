@@ -1,3 +1,5 @@
+Play the game here: https://rafnguevara.itch.io/pacman?secret=mdXRTNfuqDjbEQKATeOsfap20
+
 For getting started, I read through this resource. The general idea of drawing 
 multiple things by putting shape objects into arrays and creating them like this
 `shapes.forEach(createShape)` was inspired by this
