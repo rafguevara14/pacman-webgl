@@ -1,0 +1,242 @@
+
+/** @type {WebGLRenderingContext} */
+var gl
+var canvas;
+
+function largest_square(sx=1.0, sy=1.0){
+	return [
+		vec2( 1.0*sx,  1.0*sy),
+		vec2(-1.0*sx, -1.0*sy),
+		vec2(-1.0*sx,  1.0*sy), // shared diagonal
+		vec2( 1.0*sx,  1.0*sy), // shared diagonal
+		vec2(-1.0*sx, -1.0*sy),
+		vec2( 1.0*sx, -1.0*sy)
+	];
+}
+
+function create_shape(color=null, positions=null, translation=null, numVertices=null){
+	return {
+		vshader: './shaders/wall.vert', 
+		fshader: './shaders/wall.frag',
+		numVertices: numVertices,
+		translation: translation,
+		positions: positions,
+		color: Array(numVertices).fill(color),
+		pBuffer: null,
+		vao: null,
+		program: null,
+		primitive: null
+	};
+}
+
+const create_wall = (color, scale, translation) => 
+	create_shape(
+		color,
+		largest_square(scale[0], scale[1]),
+		translation,
+		6
+	)
+
+const create_dash = (scale, translation) => 
+	create_shape(
+		vec4(0.0, 0.0, 1.0, 1.0),
+		largest_square(scale[0], scale[1]),
+		translation,
+		6
+	)
+// const create_dash = (translation) => 
+// 	create_shape(
+// 		vec4(0.0, 0.0, 0.0, 1.0),
+// 		[
+// 			vec2(0.04, 0.0), 
+// 			vec2(0.02, 0.0),
+// 			vec2(0.0, 0.0),
+// 			vec2(-0.02, 0.0),
+// 			vec2(-0.04, 0.0),
+// 		],
+// 		translation,
+// 		5
+// 	)
+
+
+const green_wall_color = vec4(0.22, 0.9, 0.4, 1.0)
+
+var ceiling_floor_squares = (xreflection, yreflection) => create_wall(
+	 	green_wall_color,
+		vec2(0.25, 0.15),
+		vec2(xreflection*0.4, yreflection*0.5),
+)
+
+// https://webglfundamentals.org/webgl/lessons/webgl-drawing-multiple-things.html
+var walls = [ 
+
+	// outer gray wall
+	create_wall(
+		vec4(0.0, 0.0, 0.0, 0.5),
+		vec2(1.0, 1.0),
+		vec2(0.0, 0.0),
+	),
+
+	//outer blue bounds
+	create_wall(
+		vec4(0.0, 0.2, 1.0, 1.0),
+		vec2(0.80, 0.80),
+		vec2(0.0, 0.0),
+	),
+
+	create_wall(
+		vec4(0.8, 0.8, 0.8, 1.0),
+		vec2(0.78, 0.78),
+		vec2(0.0, 0.0),
+	),
+
+	// center green walls
+	create_wall(
+		green_wall_color,
+		vec2(0.09, 0.17),
+		vec2(0.55, 0.0),
+	),
+	create_wall(
+		green_wall_color,
+		vec2(0.09, 0.17),
+		vec2(-0.55, 0.0),
+	),
+	
+	// green walls
+	ceiling_floor_squares( 1.0, 1.0),
+	ceiling_floor_squares( 1.0, -1.0),
+	ceiling_floor_squares( -1.0, 1.0),
+	ceiling_floor_squares( -1.0, -1.0),
+]
+
+const horizontal_dash = (translation) => create_dash(vec2(0.02, 0.002), translation)
+const vertical_dash = (translation) => create_dash(vec2(0.002, 0.02), translation)
+
+const horizontal_radius = 0.12
+const vertical_radius = 0.12
+
+var dashes = [
+	vertical_dash(vec2(0.08, 0.10)),
+	vertical_dash(vec2(0.08, 0.05)),
+	vertical_dash(vec2(0.08, 0.0)),
+	vertical_dash(vec2(0.08, -0.05)),
+	vertical_dash(vec2(0.08, -0.10)),
+
+
+	vertical_dash(vec2(0.08, 0.10)),
+	vertical_dash(vec2(0.08, 0.05)),
+	vertical_dash(vec2(0.08, 0.0)),
+	vertical_dash(vec2(0.08, -0.05)),
+	vertical_dash(vec2(0.08, -0.10)),
+
+	horizontal_dash(vec2(0.05, horizontal_radius)),
+	horizontal_dash(vec2(0.0,   horizontal_radius)),
+	horizontal_dash(vec2(-0.05, horizontal_radius)),
+	
+	horizontal_dash(vec2(0.02, -horizontal_radius)),
+	horizontal_dash(vec2(0.0,   -horizontal_radius)),
+	horizontal_dash(vec2(-0.05, -horizontal_radius)),
+]
+
+
+
+
+
+
+
+function initializeContext(){
+	canvas = document.getElementById("myCanvas");
+	gl = canvas.getContext("webgl2");
+
+	const pixelRatio = window.devicePixelRatio || 1;
+
+    // using clientWidth and clientHeight
+    canvas.width = pixelRatio * canvas.clientWidth;
+    canvas.height = pixelRatio * canvas.clientHeight;
+
+    gl.viewport(0, 0, canvas.width, canvas.height);
+
+    gl.clearColor(0, 0, 0, 0);
+
+    gl.lineWidth(1.0);
+
+	gl.enable(gl.DEPTH_TEST);
+
+    console.log("WebGL initialized.");
+
+	walls.forEach((wall) => wall.primitive = gl.TRIANGLES)
+	dashes.forEach((dash) => dash.primitive = gl.TRIANGLES)
+}
+
+function createShape(shape){
+	// position buffer
+	var position_buffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, position_buffer);
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(flatten(shape.positions)), gl.STATIC_DRAW);
+
+	// color buffer
+	var color_buffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, color_buffer);
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(flatten(shape.color)), gl.STATIC_DRAW);
+
+	// initialize shaders
+	var program = initShaders(gl, shape.vshader, shape.fshader);
+	gl.useProgram(program)
+
+	// create vertex array objects
+	var vao = gl.createVertexArray();
+	gl.bindVertexArray(vao);
+
+	var posAttribLoc = gl.getAttribLocation(program, "pos");
+	gl.bindBuffer(gl.ARRAY_BUFFER, position_buffer);
+	gl.enableVertexAttribArray(posAttribLoc);
+	gl.vertexAttribPointer(posAttribLoc, 2, gl.FLOAT, false, 0, 0);
+
+	var colorAttribLoc = gl.getAttribLocation(program, "color");
+	gl.bindBuffer(gl.ARRAY_BUFFER, color_buffer);
+	gl.enableVertexAttribArray(colorAttribLoc);
+	gl.vertexAttribPointer(colorAttribLoc, 4, gl.FLOAT, false, 0, 0);
+
+	var translationLoc = gl.getUniformLocation(program, "translation");
+	gl.uniform2f(translationLoc, shape.translation[0], shape.translation[1]);
+
+	// cache values when time to render
+	shape.pBuffer = position_buffer;
+	shape.vao = vao;
+	shape.program = program;
+}
+
+function drawShape(shape){
+	gl.useProgram(shape.program);
+	gl.bindVertexArray(shape.vao); 
+	gl.bindBuffer(gl.ARRAY_BUFFER, shape.pBuffer);
+
+	gl.drawArrays(shape.primitive, 0, 6);
+}
+
+
+async function setup() {
+    initializeContext();
+
+	walls.forEach(createShape);
+
+	dashes.forEach(createShape);
+
+	// draw in reverse order
+	walls.reverse();
+	render();
+};
+
+// Draws the vertex data.
+function render() {
+
+	gl.clear( gl.COLOR_BUFFER_BIT ); 
+
+	dashes.forEach(drawShape);
+
+	walls.forEach(drawShape);
+
+	requestAnimationFrame(render);
+}
+
+window.onload = setup
